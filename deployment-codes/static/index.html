@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Forest Loss Detection</title>
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500&display=swap"/>
+<link rel="stylesheet" href="/static/css/styles.css"/>
+</head>
+<body>
+<div id="app">
+
+  <!-- Header -->
+  <header id="header">
+    <div class="logo">
+      <div class="icon">&#127807;</div>
+      <div>
+        <div>Forest Loss Detection</div>
+        <div class="sub">North-East India &nbsp;&middot;&nbsp; Sentinel-1/2 &nbsp;&middot;&nbsp; Siamese UNet</div>
+      </div>
+    </div>
+    <div class="spacer"></div>
+    <div class="device-badge" id="device-badge">CPU</div>
+  </header>
+
+  <div id="body">
+
+    <!-- Map -->
+      <div id="map-wrap">
+        <div id="map"></div>
+        <div id="compare-view">
+          <div id="compare-canvas">
+            <div class="compare-pane" data-layer="t1"></div>
+            <div class="compare-pane compare-pane-swipe" data-layer="t2"></div>
+            <div class="compare-pane compare-pane-overlay" data-layer="forest30"></div>
+            <div class="compare-pane compare-pane-overlay" data-layer="hansen"></div>
+            <div class="compare-pane compare-pane-overlay" data-layer="pred"></div>
+          </div>
+        </div>
+
+        <div id="map-action-bar">
+          <button class="map-action-btn" id="btn-map-draw" type="button">Draw bbox</button>
+          <button class="map-action-btn" id="btn-map-view-aoi" type="button">Use visible map</button>
+        </div>
+
+      <!-- Swipe divider -->
+      <div id="swipe-wrap">
+        <div id="swipe-line">
+          <div id="swipe-handle">&#9664; &#9654;</div>
+        </div>
+      </div>
+
+      <div id="compare-slider-wrap">
+        <div class="compare-slider-labels">
+          <span>T1</span>
+          <span>Compare</span>
+          <span>T2</span>
+        </div>
+        <input type="range" id="compare-slider" min="2" max="98" value="50"/>
+      </div>
+
+      <!-- Year badges -->
+      <div class="year-badge" id="badge-t1">T1</div>
+      <div class="year-badge" id="badge-t2">T2</div>
+
+      <!-- Progress bar + label -->
+      <div id="progress-bar-wrap" style="display:none;position:absolute;top:0;left:0;right:0;z-index:1500;background:rgba(8,13,20,.7)">
+        <div id="progress-bar"></div>
+        <div id="progress-label" style="font-size:10px;color:#94a3b8;padding:2px 10px 3px;letter-spacing:.04em"></div>
+      </div>
+
+      <!-- Toast -->
+      <div id="toast-wrap"></div>
+    </div>
+
+    <!-- Sidebar -->
+    <aside id="sidebar">
+      <div id="sidebar-scroll">
+
+        <!-- Step 1: Time Period -->
+        <div class="section">
+          <div class="section-title">
+            <span class="step-badge">1</span>Time Period
+          </div>
+          <div class="slider-group">
+            <div class="slider-item">
+              <div class="slider-label">
+                <span>T1 year (before)</span>
+                <span class="val" id="t1-val">2021</span>
+              </div>
+              <input type="range" id="t1-slider" min="2018" max="2024" step="1" value="2021"/>
+            </div>
+            <div class="slider-item">
+              <div class="slider-label">
+                <span>T2 year (after)</span>
+                <span class="val" id="t2-val">2023</span>
+              </div>
+              <input type="range" id="t2-slider" min="2019" max="2025" step="1" value="2023"/>
+            </div>
+          </div>
+          <div class="hint" style="margin-top:8px">
+            Gap: <b>1&ndash;3 years</b> &nbsp;&middot;&nbsp; dry-season composites (Nov&ndash;Mar)
+          </div>
+        </div>
+
+        <!-- Step 2: AOI -->
+        <div class="section">
+          <div class="section-title">
+            <span class="step-badge">2</span>Select Area of Interest
+          </div>
+
+          <div class="btn-row" style="margin-bottom:10px">
+            <button class="btn btn-secondary" id="btn-draw-rect" type="button">Draw bbox</button>
+            <button class="btn btn-secondary" id="btn-use-view" type="button">Use map view</button>
+          </div>
+
+          <!-- Area limit setting -->
+          <div class="setting-row" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+            <span style="font-size:11px;color:var(--text2);flex:1">Max area (km&sup2;)</span>
+            <input type="number" id="max-km2-input"
+                   min="1" max="1000" value="200" step="10"
+                   style="width:72px;background:var(--bg3);border:1px solid var(--border);
+                          color:var(--text0);border-radius:5px;padding:3px 7px;
+                          font-size:12px;font-family:var(--mono);text-align:right"/>
+          </div>
+
+          <div class="hint">
+            Use <b>Draw bbox</b> for a precise rectangle, or <b>Use map view</b> to analyze the currently visible extent.<br><br>
+            Earth Engine layers now load as true map layers, so panning and zooming stay interactive after the AOI is selected.
+          </div>
+        </div>
+
+        <!-- Step 3: Layers -->
+        <div class="section">
+          <div class="section-title">
+            <span class="step-badge">3</span>Layers
+          </div>
+
+          <div id="layer-panel">
+            <!-- built by ui.js -->
+          </div>
+          <div id="layer-opacity-panel"></div>
+        </div>
+
+        <!-- Step 4: Detection -->
+        <div class="section">
+          <div class="section-title">
+            <span class="step-badge">4</span>Detection
+          </div>
+
+          <div class="setting-card" style="margin-bottom:12px">
+            <div class="setting-card-top">
+              <span>Inference device</span>
+              <span id="device-status-text">CPU default</span>
+            </div>
+            <div class="device-choice" id="device-choice">
+              <button class="device-option active" id="device-cpu" data-device="cpu" type="button">CPU</button>
+              <button class="device-option" id="device-cuda" data-device="cuda" type="button">CUDA</button>
+            </div>
+          </div>
+
+          <div class="slider-item" style="margin-bottom:12px">
+            <div class="slider-label">
+              <span>Probability threshold</span>
+              <span class="val" id="thr-val">0.55</span>
+            </div>
+            <input type="range" id="thr-slider" min="0.30" max="0.90" step="0.01" value="0.55"/>
+          </div>
+
+          <div class="setting-card" style="margin-bottom:12px">
+            <div class="setting-card-top">
+              <span>Prediction view</span>
+              <span id="pred-style-text">Fill</span>
+            </div>
+            <div class="device-choice" id="pred-style-choice">
+              <button class="device-option active" id="pred-style-fill" data-style="fill" type="button">Fill</button>
+              <button class="device-option" id="pred-style-outline" data-style="outline" type="button">Outline</button>
+            </div>
+          </div>
+          <p class="hint" style="margin-bottom:10px">
+            Higher threshold &rarr; fewer false positives.<br>
+            Re-threshold is instant &mdash; no model re-run.
+          </p>
+
+          <div class="btn-row">
+            <button class="btn btn-primary" id="btn-detect">
+              <div class="spinner"></div>
+              <span class="btn-text">&#9654;&nbsp; Run Detection</span>
+            </button>
+            <button class="btn btn-secondary" id="btn-rethresh" style="max-width:104px;font-size:11px">
+              Re-threshold
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 5: Results -->
+        <div class="section">
+          <div class="section-title">
+            <span class="step-badge">5</span>Results
+          </div>
+
+          <div id="empty-hint" style="display:flex;flex-direction:column;align-items:center;gap:8px;padding:16px 0;text-align:center;color:var(--text2);font-size:11px;line-height:1.7">
+            <div style="font-size:28px;opacity:.35">&#128202;</div>
+            Run detection to see statistics.
+          </div>
+
+          <div id="stats-card">
+            <!-- filled by ui.js -->
+          </div>
+
+          <button class="btn btn-secondary" id="btn-redraw"
+                  style="margin-top:12px;font-size:11px;display:none">
+            &#10010;&nbsp; Select New Region
+          </button>
+        </div>
+
+      </div>
+    </aside>
+
+  </div>
+</div>
+
+<!-- Leaflet Draw toolbar icon fix (uses text fallback) -->
+<style>
+.leaflet-draw { display:none !important; }
+</style>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+<script src="/static/js/api.js"></script>
+<script src="/static/js/map.js"></script>
+<script src="/static/js/ui.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+  MAP.init();
+  UI.init();
+
+  // Show re-draw button once we have stats
+  const statsCard = document.getElementById('stats-card');
+  const reDrawBtn = document.getElementById('btn-redraw');
+  const observer  = new MutationObserver(() => {
+    if (statsCard.classList.contains('visible') && reDrawBtn) {
+      reDrawBtn.style.display = 'flex';
+    }
+  });
+  observer.observe(statsCard, { attributes: true, attributeFilter: ['class'] });
+
+  // Refresh swipe after any map interaction
+  document.getElementById('map').addEventListener('resize', () => MAP.refreshSwipe());
+});
+</script>
+</body>
+</html>
