@@ -198,3 +198,4 @@ This project demonstrates a production-ready pipeline combining:
 - Cloud geospatial processing (GEE)
 - Deep learning (Siamese UNet)
 - Modern web stack (FastAPI + JS UI)
+- deployed link - https://huggingface.co/spaces/suranjan90/forest-cover-loss
