@@ -49,29 +49,22 @@ and T2 (2023), the model produces a pixel-level binary mask where:
 project/
 │
 ├── notebooks/
-│   ├── data_pipeline_v2.ipynb       # GEE extraction + patch generation
-│   ├── baseline_model.ipynb         # All model definitions + training runs
+│   ├── Data_pipeline_v2.ipynb       # GEE extraction + patch generation
+│   ├── dataset-eda.ipynb            # Exploratory data analysis + sanity checks
+│   ├── baseline-model.ipynb         # Baseline model + all training experiments
+│   ├── model_improvement.ipynb      # Data augmentation + loss refinement run
 │   └── evaluation.ipynb             # Test set evaluation + visualizations
 │
-├── dataset/                         # Kaggle input (read-only on Kaggle)
-│   ├── Meghalaya_2021_2023/
-│   │   ├── t1/                      # T1 .npy patches (6, 256, 256)
-│   │   ├── t2/                      # T2 .npy patches (6, 256, 256)
-│   │   └── label/                   # Binary mask .npy patches (256, 256)
-│   └── Nagaland_2021_2023/
-│       ├── t1/
-│       ├── t2/
-│       └── label/
-│
-├── outputs/                         # Generated during training (Kaggle /working)
-│   ├── train_split.csv
-│   ├── val_split.csv
-│   ├── test_split.csv
-│   ├── best_model.pth               # Best checkpoint by val IoU
-│   └── figures/                     # All evaluation plots
+├── dataset/
+│   └── download_dataset.py          # Run this to fetch the dataset from Kaggle
 │
 └── developer_guide.md               # This file
 ```
+
+> **Note:** The dataset is not committed to the repository due to its size (~3–5 GB).
+> Run `download_dataset.py` once to fetch it locally before opening any notebook.
+> Model checkpoints and figures are saved automatically by the notebooks to
+> Kaggle's `/kaggle/working/` directory during training.
 
 ---
 
@@ -652,14 +645,35 @@ def make_false_color(img_6ch):
 
 ## 11. Reproducing Results
 
-### Full reproduction steps
+### Steps
 
 ```bash
-# 1. Open Kaggle notebook with T4 GPU accelerator enabled
-# 2. Add dataset: suranjandas1990/forest-loss-dataset
-# 3. Add W&B API key to Kaggle secrets as "wandb_api_key"
-# 4. Run baseline_model.ipynb cells in order
+# 1. Clone the repository
+git clone <repo-url>
+cd project
+
+# 2. Download the dataset
+cd dataset
+pip install kagglehub
+python download_dataset.py
+cd ..
+
+# 3. Open Kaggle and upload notebooks from project/notebooks/
+#    Enable T4 GPU accelerator in Kaggle notebook settings
+#    Add dataset: suranjandas1990/forest-loss-dataset
+#    Add W&B API key to Kaggle secrets as "wandb_api_key"
+
+# 4. Run notebooks in this order:
+#    Data_pipeline_v2.ipynb        → generates dataset patches (if re-extracting)
+#    dataset-eda.ipynb             → sanity checks and EDA
+#    baseline-model.ipynb          → trains all experiments, saves best_model.pth
+#    model_improvement.ipynb       → data augmentation + Dice+Focal run
+#    evaluation.ipynb              → test set metrics + visualizations
 ```
+
+> Each notebook is self-contained. Running `baseline-model.ipynb` end-to-end
+> trains all four experiments, logs to W&B, saves checkpoints as artifacts,
+> and produces the comparison table. No separate scripts are needed.
 
 ### Loading a saved checkpoint
 
@@ -673,24 +687,6 @@ if list(state_dict.keys())[0].startswith("module."):
 
 model.load_state_dict(state_dict)
 model.eval()
-```
-
-### Running inference on a single patch
-
-```python
-# Load any .npy patch pair
-t1 = torch.from_numpy(
-    np.load("path/to/t1/patch.npy").astype(np.float32)
-).unsqueeze(0).to(device)   # (1, 6, 256, 256)
-
-t2 = torch.from_numpy(
-    np.load("path/to/t2/patch.npy").astype(np.float32)
-).unsqueeze(0).to(device)
-
-with torch.no_grad():
-    logits   = model(t1, t2)
-    prob     = torch.sigmoid(logits).squeeze().cpu().numpy()
-    pred_bin = (prob >= 0.30).astype(np.uint8)   # use best_thresh = 0.30
 ```
 
 ---
