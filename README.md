@@ -12,7 +12,8 @@ This project enables users to:
 - Choose two time periods (T1 and T2)  
 - Visualize satellite imagery and forest data  
 - Run a deep learning model to detect forest loss  
-- Compare before/after imagery using an intuitive UI  
+- Compare before/after imagery using an intuitive UI
+- deployed link - https://huggingface.co/spaces/suranjan90/forest-cover-loss
 
 The system is designed for environmental monitoring, research, and decision support in forestry and land-use analysis.
 
@@ -198,4 +199,3 @@ This project demonstrates a production-ready pipeline combining:
 - Cloud geospatial processing (GEE)
 - Deep learning (Siamese UNet)
 - Modern web stack (FastAPI + JS UI)
-- deployed link - https://huggingface.co/spaces/suranjan90/forest-cover-loss
